@@ -1,0 +1,162 @@
+---
+title: "Spatiotemporal Analysis of NYC Shootings"
+output:
+  pdf_document: default
+  html_document: default
+date: "2025-04-24"
+---
+
+# Question of Interest
+
+In this project, I look at when and where shootings happen in New York City. I focus on which boroughs see the most and the fewest incidents, and whether certain times of day are linked to more shootings. I also explore how the type of location changes the patterns we see, depending on the time of day and the borough. The goal is to better understand how location and timing together shape where violence is most likely to occur, and help us predict how best to stay safe.
+
+# Source and Description of Data
+
+The data comes from the NYPD Shooting Incident Data (Historic) available through NYC Open Data. It includes all recorded shooting incidents from 2006 to 2022, providing information about time, location, victim and perpetrator characteristics, and outcomes. For my analysis, many of these columns will be redundant and therefore removed from the data set.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(readr) 
+library(dplyr) 
+library(ggplot2)
+library(lubridate)
+library(nnet)
+```
+
+# Read in the Data
+
+```{r}
+data <- read_csv("C:/Users/jessi/Documents/NYPD_Shooting_Incident_Data__Historic_.csv",show_col_types = FALSE)
+```
+
+# View Data
+```{r}
+head(data)
+summary(data)
+```
+# Cleaning the Data 
+
+```{r}
+# Removing unwanted columns for my analysis
+data_clean <- data %>%
+  select(-Latitude, -Longitude, -X_COORD_CD, -Y_COORD_CD, -PRECINCT, -JURISDICTION_CODE, -LOCATION_DESC, -Lon_Lat, -STATISTICAL_MURDER_FLAG, -LOC_OF_OCCUR_DESC, -INCIDENT_KEY,
+         -OCCUR_DATE, -PERP_AGE_GROUP, -PERP_RACE, -VIC_AGE_GROUP, -VIC_RACE)
+
+# Making unavailable data points consistent as NA
+data_clean <- data_clean %>%
+  mutate(
+    PERP_SEX = 
+      na_if(PERP_SEX, "(null)"),
+    PERP_SEX = 
+      na_if(PERP_SEX, "U"),
+    LOC_CLASSFCTN_DESC = 
+      na_if(LOC_CLASSFCTN_DESC, "(null)"),
+  )
+
+# Renaming columns
+data_clean <- data_clean %>%
+  rename(
+    Time = OCCUR_TIME,
+    Borough = BORO,
+    Location = LOC_CLASSFCTN_DESC,
+    Perp_Sex = PERP_SEX,
+    Vic_Sex = VIC_SEX
+  )
+
+head(data_clean)
+```
+There are multiple missing values for some of the columns. I plan to filter out these rows where applicable to ensure the integrity of my data and findings.
+
+# Visualizations
+## 1. Shootings by Borough
+```{r}
+# Histogram for frequency of shootings by borough
+data_clean %>%
+  ggplot(aes(x = Borough)) + 
+  geom_bar(fill = "firebrick") + 
+  labs(title = "Number of Shootings by Borough", x = "Borough", y = "Frequency")
+```
+
+## 2. Shootings by Hour of the Day (24h)
+
+```{r}
+# Histogram for frequency of shootings by hour of the day
+data_clean %>%
+  ggplot(aes(x = hour(Time))) +
+  geom_histogram(binwidth = 1,
+                 fill = "steelblue") + 
+  labs(title = "Shootings by Hour of Day", x = "Hour of Day (24h)", y = "Frequency")
+
+```
+
+## 3. Locations of Shootings
+
+```{r}
+
+# Finding the frequency of shootings in each location
+loc_counts <- data_clean %>%
+  filter(!is.na(Location)) %>%
+  group_by(Location) %>%
+  summarize(frequency = n())
+
+# Two vectors containing info for pie chart
+frequencies <- loc_counts$frequency
+labels <- loc_counts$Location
+
+# Find percentage for each segment of the pie chart
+piepercent <- round(100 * frequencies / sum(frequencies), 1)
+
+legend_labels <- paste0(loc_counts$Location, " (", piepercent, "%)")
+
+pie(frequencies, labels = NA,
+    main = "Shootings by Location",
+    col = rainbow(length(frequencies)))
+
+legend("topright", legend = legend_labels,
+       cex = 0.7, fill = rainbow(length(frequencies)))
+
+```
+
+# Analysis of Visualizations
+## 1. Shootings by Borough
+
+Brooklyn has the highest number of reported shootings, followed by the Bronx. Manhattan and Queens reported a moderate level of shootings with Staten Island reporting the lowest number.
+
+## 2. Shootings by Hour of the Day
+
+The number of reported shootings coincide with the hours of the day which are the darkest. The number of shootings between 5am and 6pm are relatively moderate. After this point, the number of shootings increase significantly each hour, peaking around midnight before slowly decreasing until around 5am. 
+
+## 3. Location of Shootings
+
+Shootings seem to overwhelmingly occur in the street, making up around a third of all shooting locations. The combination of shootings that take place in housing and dwelling come in second making up around a quarter of all shooting locations. Commercial locations follow this, and then vehicles, playground and other report the lowest number of shootings.
+
+# Model
+
+To better understand where shootings occur, I will fit a multinomial logistic regression model to predict type of location (Street, Housing, Dwelling, etc.) based on the borough and the time of day (hour). The model includes the outcome variable, Location, and the predictors, Borough and Hour. 
+```{r}
+# Adding Hour variable
+data_clean <- data_clean %>%
+  mutate(Hour = hour(Time))
+
+# Remove missing values
+model_data <- data_clean %>% 
+  filter(!is.na(Location))
+
+# Multinomial Regression
+model <- multinom(Location ~ Borough + Hour, data = model_data)
+summary(model)
+
+exp(coef(model))
+```
+The multinomial logistic regression showed some clear patterns in where and when shootings happen in New York City. Not surprisingly, shootings on the street were the most common, which matches the strong positive intercept found for the street category. Compared to the Bronx, shootings were about 35% less likely to happen on the street in Brooklyn, 41% less likely in Manhattan, and 38% less likely in Queens. In contrast, shootings were 37% more likely to happen on the street in Staten Island than in the Bronx.
+
+Time of day also made a difference. With each additional hour later into the day, the odds of a shooting happening on the street went up by about 2%, and the odds of a shooting happening in housing areas increased by about 4%.
+
+There were also interesting differences by location type. For example, playground shootings were around 60% more likely to happen in Brooklyn compared to the Bronx. Overall, both where and when a shooting happens seem to have a strong influence on the type of place where shootings occur.
+
+# Conclusion
+
+The analysis reveals clear spatial and temporal patterns in NYC shooting incidents. Brooklyn and the Bronx report the highest number of shootings, while Staten Island reports the fewest. Most shootings take place on the streets and occur during the late evening to early morning hours, suggesting a link to a reduced public presence and reduced visibility during nighttime. 
+
+Technically, this data could provide insight into where and when to avoid being in NYC to lower your chances of being involved in a shooting. However, there may be several factors that introduced bias in the reporting of this data. Generally, in lower income areas (which are often predominantly people of color), there may be increased police presence and therefore increased rate of reporting. As someone who is only viewing number abstractly without understanding the systemic factors that shape them, its possible that assumptions about safety may reflect narratives I have 
+absorbed through media and not objective reality. It is important to recognize that analysis must go further than statistics when trying to draw meaningful conclusions from data.
