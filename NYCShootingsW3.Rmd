@@ -5,6 +5,7 @@ output:
   html_document: default
 date: "2025-04-24"
 ---
+## Ensure you have these installed: readr, dplyr, ggplot2, lubridate, nnet
 
 # Question of Interest
 
