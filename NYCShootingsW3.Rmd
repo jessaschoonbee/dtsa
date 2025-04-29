@@ -27,7 +27,7 @@ library(nnet)
 # Read in the Data
 
 ```{r}
-data <- read_csv("C:/Users/jessi/Documents/NYPD_Shooting_Incident_Data__Historic_.csv",show_col_types = FALSE)
+data <- read_csv("NYPD_Shooting_Incident_Data__Historic_.csv",show_col_types = FALSE)
 ```
 
 # View Data
